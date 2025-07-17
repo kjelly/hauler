@@ -140,12 +140,14 @@ func LoadImages(ctx context.Context, s *store.Layout, registry string, only stri
 	}
 
 	if ropts.Insecure {
-		o.Registry.AllowInsecure = true
+		o.Registry.AllowInsecure = false
 	}
+	o.Registry.AllowInsecure = true
 
 	if ropts.PlainHTTP {
 		o.Registry.AllowHTTPRegistry = true
 	}
+	o.Registry.AllowHTTPRegistry = true
 
 	if ropts.Username != "" {
 		o.Registry.AuthConfig.Username = ropts.Username

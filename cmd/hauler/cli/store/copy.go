@@ -35,8 +35,8 @@ func CopyCmd(ctx context.Context, o *flags.CopyOpts, s *store.Layout, targetRef 
 	case "registry":
 		l.Debugf("identified registry target reference of [%s]", components[1])
 		ropts := content.RegistryOptions{
-			Insecure:  o.Insecure,
-			PlainHTTP: o.PlainHTTP,
+			Insecure:  true,
+			PlainHTTP: true,
 		}
 
 		err := cosign.LoadImages(ctx, s, components[1], o.Only, ropts, ro)

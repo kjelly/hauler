@@ -33,6 +33,8 @@ func New(ctx context.Context, ro *flags.CliRootOpts) *cobra.Command {
 	addStore(cmd, ro)
 	addVersion(cmd, ro)
 	addCompletion(cmd, ro)
+	addRun(cmd, ro)
+	addServe(cmd, ro)
 
 	return cmd
 }

@@ -32,7 +32,7 @@ func startRegistry(ctx context.Context, wg *sync.WaitGroup, ro *flags.CliRootOpt
 	if err != nil {
 		panic(err)
 	}
-	store.ServeRegistryCmd(ctx, &flags.ServeRegistryOpts{StoreRootOpts: rso, Port: 6000, RootDir: ".", ReadOnly: true}, s, rso, ro)
+	store.ServeRegistryCmd(ctx, &flags.ServeRegistryOpts{StoreRootOpts: rso, Port: 6000, RootDir: "hauler-data/", ReadOnly: true}, s, rso, ro)
 }
 
 func startFileServer(ctx context.Context, wg *sync.WaitGroup, ro *flags.CliRootOpts) {
@@ -45,7 +45,7 @@ func startFileServer(ctx context.Context, wg *sync.WaitGroup, ro *flags.CliRootO
 		panic(err)
 	}
 
-	store.ServeFilesCmd(ctx, &flags.ServeFilesOpts{Port: 6001, RootDir: "fileserver"}, s, ro)
+	store.ServeFilesCmd(ctx, &flags.ServeFilesOpts{Port: 6001, RootDir: "hauler-data/fileserver"}, s, ro)
 
 }
 
@@ -140,7 +140,6 @@ func downloadFile(url string, filepath string) error {
 	if err != nil {
 		return err
 	}
-
 	return nil
 }
 
@@ -149,7 +148,35 @@ func updateEnv() {
 	d, _ := os.Getwd()
 	newPath := d + ":" + currentPath
 	_ = os.Setenv("PATH", newPath)
+}
 
+func run(ro *flags.CliRootOpts, o *RunOpts, cmd *cobra.Command, args []string) {
+	var err error
+
+	updateEnv()
+	err = os.WriteFile("./nu", nu_binary, 0755)
+	if err != nil {
+		fmt.Printf("Failed to create nu in current directory")
+	}
+	_, err = exec.LookPath("nu")
+	if err != nil {
+		fmt.Printf("Failed to run. Not found nushell in PATH. Nushell is needed")
+		panic(err)
+	}
+
+	err = downloadFile(fmt.Sprintf("http://localhost:6001/%s", o.Script), o.Script)
+	if err != nil {
+		fmt.Print("Failed to download init.nu\n")
+		panic(err)
+	}
+	c := exec.Command(o.Shell, o.Script)
+	c.Env = os.Environ()
+	stdoutStderr, err := c.CombinedOutput()
+	fmt.Printf("%s\n", stdoutStderr)
+	if err != nil {
+		fmt.Printf("failed to run init.nu.")
+		panic(err)
+	}
 }
 
 func addRun(parent *cobra.Command, ro *flags.CliRootOpts) {
@@ -158,36 +185,11 @@ func addRun(parent *cobra.Command, ro *flags.CliRootOpts) {
 	cmd := &cobra.Command{
 		Use: "run",
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Printf("%v", args)
+
 			ctx := cmd.Context()
-			var err error
-
-			updateEnv()
-			fmt.Printf("%v", os.Getenv("PATH"))
-
 			go goServe(ctx, ro)
 			waitServerRunning()
-			fmt.Printf("%v", listAllScript())
-
-			fmt.Printf("%d\n", len(nu_binary))
-			err = os.WriteFile("./nu", nu_binary, 0755)
-			if err != nil {
-				fmt.Printf("Failed to create nu in current directory")
-			}
-			_, err = exec.LookPath("nu")
-			if err != nil {
-				fmt.Printf("Failed to run. Not found nushell in PATH. Nushell is needed")
-				panic(err)
-			}
-
-			downloadFile(fmt.Sprintf("http://localhost:6001/%s", o.Script), o.Script)
-			c := exec.Command(o.Shell, o.Script)
-			c.Env = os.Environ()
-			stdoutStderr, err := c.CombinedOutput()
-			fmt.Printf("%s\n", stdoutStderr)
-			if err != nil {
-				panic(err)
-			}
+			run(ro, o, cmd, args)
 		},
 	}
 	o.AddFlags(cmd)
@@ -200,9 +202,43 @@ func addServe(parent *cobra.Command, ro *flags.CliRootOpts) {
 		Run: func(cmd *cobra.Command, args []string) {
 			fmt.Printf("%v", args)
 			ctx := cmd.Context()
-
 			goServe(ctx, ro)
 		},
 	}
 	parent.AddCommand(cmd)
+}
+
+func addRunZst(parent *cobra.Command, ro *flags.CliRootOpts) {
+	cmd := &cobra.Command{
+		Use:  "run-zst",
+		Args: cobra.MinimumNArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			self, _ := os.Executable()
+			for _, v := range args {
+				c := exec.Command(self, "store", "load", "-f", v)
+				stdoutStderr, err := c.CombinedOutput()
+				fmt.Printf("%s\n", stdoutStderr)
+				if err != nil {
+					fmt.Printf("failed to load store, %s", v)
+					panic(err)
+				}
+				c = exec.Command(self, "run")
+				stdoutStderr, err = c.CombinedOutput()
+				fmt.Printf("%s\n", stdoutStderr)
+				if err != nil {
+					fmt.Printf("failed to run store, %s", v)
+					panic(err)
+				}
+			}
+			defer cleanUp()
+		},
+	}
+	parent.AddCommand(cmd)
+}
+
+func cleanUp() {
+	err := os.RemoveAll("./hauler-data")
+	if err != nil {
+		fmt.Printf("Failed to remove fileserver and registry data, %s", err)
+	}
 }

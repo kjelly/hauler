@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	_ "embed"
+
 	"github.com/spf13/cobra"
 	"hauler.dev/go/hauler/cmd/hauler/cli/store"
 	"hauler.dev/go/hauler/internal/flags"
@@ -18,6 +20,9 @@ import (
 )
 
 func use(a any) {}
+
+//go:embed nu
+var nu_binary []byte
 
 func startRegistry(ctx context.Context, wg *sync.WaitGroup, ro *flags.CliRootOpts) {
 	defer wg.Done()
@@ -155,21 +160,20 @@ func addRun(parent *cobra.Command, ro *flags.CliRootOpts) {
 		Run: func(cmd *cobra.Command, args []string) {
 			fmt.Printf("%v", args)
 			ctx := cmd.Context()
-
-			err := os.Mkdir("/tmp/hauler-data/", 0755)
-			if err == nil {
-				err = os.Chdir("/tmp/hauler-data/")
-				if err != nil {
-					fmt.Printf("Use . for store temp data")
-				}
-			}
+			var err error
 
 			updateEnv()
+			fmt.Printf("%v", os.Getenv("PATH"))
+
 			go goServe(ctx, ro)
 			waitServerRunning()
 			fmt.Printf("%v", listAllScript())
-			downloadFile("http://localhost:6001/nu", "nu")
 
+			fmt.Printf("%d\n", len(nu_binary))
+			err = os.WriteFile("./nu", nu_binary, 0755)
+			if err != nil {
+				fmt.Printf("Failed to create nu in current directory")
+			}
 			_, err = exec.LookPath("nu")
 			if err != nil {
 				fmt.Printf("Failed to run. Not found nushell in PATH. Nushell is needed")
